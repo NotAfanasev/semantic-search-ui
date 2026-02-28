@@ -55,6 +55,19 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function normalizeDateString(value: string | undefined, fallback: string): string {
+  const raw = (value ?? "").trim()
+  if (!raw || ["nan", "none", "null", "invalid date"].includes(raw.toLowerCase())) {
+    return fallback
+  }
+  const candidate = raw.includes("T") ? raw.slice(0, 10) : raw
+  const parsed = new Date(candidate)
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback
+  }
+  return candidate
+}
+
 function toSnippet(text: string, maxLength = 220): string {
   const normalized = text.replace(/\s+/g, " ").trim()
   if (normalized.length <= maxLength) return normalized
@@ -79,13 +92,14 @@ function mapDocument(raw: {
   updated_at?: string
 }): Document {
   const id = String(raw.doc_id ?? "")
-  const createdAt = raw.created_at?.trim() || todayIso()
+  const createdAt = normalizeDateString(raw.created_at, todayIso())
+  const updatedAt = normalizeDateString(raw.updated_at, createdAt)
   return {
     id,
     title: raw.title?.trim() || `Документ ${id}`,
     content: raw.text ?? "",
     createdAt,
-    updatedAt: raw.updated_at?.trim() || createdAt,
+    updatedAt,
   }
 }
 

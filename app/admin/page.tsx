@@ -38,22 +38,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     let cancelled = false
+
     const run = async () => {
       try {
         const data = await listAdminDocuments()
-        if (!cancelled) {
-          setDocuments(data)
-        }
+        if (!cancelled) setDocuments(data)
       } catch {
-        if (!cancelled) {
-          toast.error("Не удалось загрузить документы")
-        }
+        if (!cancelled) toast.error("Не удалось загрузить документы")
       } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        if (!cancelled) setLoading(false)
       }
     }
+
     run()
     return () => {
       cancelled = true
@@ -89,6 +85,7 @@ export default function AdminPage() {
 
   async function handleDeleteConfirm() {
     if (!deleteTarget) return
+
     try {
       await deleteAdminDocument(deleteTarget.id)
       toast.success("Документ удален", { description: deleteTarget.title })
@@ -100,9 +97,13 @@ export default function AdminPage() {
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString("ru-RU", {
-      day: "numeric",
-      month: "short",
+    const parsed = new Date(dateStr)
+    if (Number.isNaN(parsed.getTime())) return "—"
+
+    // Numeric date is shorter than "1 мар. 2026 г." and keeps action column visible.
+    return parsed.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
       year: "numeric",
     })
   }
@@ -158,13 +159,13 @@ export default function AdminPage() {
             className="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
             style={{ animation: "fadeInUp 0.35s ease-out" }}
           >
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="font-medium">Название</TableHead>
-                  <TableHead className="font-medium hidden sm:table-cell w-[120px]">Создан</TableHead>
-                  <TableHead className="font-medium hidden md:table-cell w-[120px]">Обновлен</TableHead>
-                  <TableHead className="font-medium text-right w-[100px]">Действия</TableHead>
+                  <TableHead className="font-medium hidden sm:table-cell w-[110px]">Создан</TableHead>
+                  <TableHead className="font-medium hidden md:table-cell w-[110px]">Обновлен</TableHead>
+                  <TableHead className="font-medium text-right w-[84px]">Действия</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -178,18 +179,18 @@ export default function AdminPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground hidden sm:table-cell">
                       {formatDate(doc.createdAt)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground hidden md:table-cell">
                       {formatDate(doc.updatedAt)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                    <TableCell className="text-right w-[84px]">
+                      <div className="flex items-center justify-end gap-0.5">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                           onClick={() => handleEdit(doc)}
                           aria-label={`Редактировать ${doc.title}`}
                         >
@@ -198,7 +199,7 @@ export default function AdminPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                           onClick={() => setDeleteTarget(doc)}
                           aria-label={`Удалить ${doc.title}`}
                         >

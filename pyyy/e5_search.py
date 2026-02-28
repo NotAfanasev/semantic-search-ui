@@ -82,6 +82,17 @@ def normalize_text(s: str) -> str:
     return " ".join(str(s).split())
 
 
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and np.isnan(value):
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"nan", "none", "null"}:
+        return ""
+    return text
+
+
 def _to_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -386,8 +397,8 @@ def get_document_core(doc_id: str, state: Optional[SearchState] = None) -> Optio
 
     first_row = doc_rows.iloc[0]
     title = normalize_text(first_row.get("title", "")) or f"Документ {target}"
-    created_at = str(first_row.get("created_at", "")).strip() or _today_iso()
-    updated_at = str(first_row.get("updated_at", "")).strip() or created_at
+    created_at = _safe_str(first_row.get("created_at", "")) or _today_iso()
+    updated_at = _safe_str(first_row.get("updated_at", "")) or created_at
 
     return {
         "doc_id": target,
@@ -409,9 +420,9 @@ def list_documents_core(state: Optional[SearchState] = None) -> List[Dict[str, A
         if not str(doc_id).strip():
             continue
         first_row = group.iloc[0]
-        title = normalize_text(first_row.get("title", "")) or f"Документ {doc_id}"
-        created_at = str(first_row.get("created_at", "")).strip() or _today_iso()
-        updated_at = str(first_row.get("updated_at", "")).strip() or created_at
+        title = normalize_text(_safe_str(first_row.get("title", ""))) or f"Документ {doc_id}"
+        created_at = _safe_str(first_row.get("created_at", "")) or _today_iso()
+        updated_at = _safe_str(first_row.get("updated_at", "")) or created_at
         documents.append(
             {
                 "doc_id": str(doc_id),
@@ -506,9 +517,9 @@ def update_document_core(
         return None
 
     existing = df[mask].iloc[0]
-    resolved_department = (department or str(existing.get("department", "")).strip() or "general")
-    resolved_access = (access_level or str(existing.get("access_level", "")).strip() or "internal")
-    created_at = str(existing.get("created_at", "")).strip() or _today_iso()
+    resolved_department = (department or _safe_str(existing.get("department", "")) or "general")
+    resolved_access = (access_level or _safe_str(existing.get("access_level", "")) or "internal")
+    created_at = _safe_str(existing.get("created_at", "")) or _today_iso()
     updated_at = _today_iso()
 
     kept = df[~mask].copy()
