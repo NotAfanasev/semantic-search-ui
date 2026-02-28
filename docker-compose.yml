@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: pyyy/Dockerfile
+    container_name: semantic_api
+    restart: unless-stopped
+    volumes:
+      - ./pyyy/data:/app/pyyy/data
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: semantic_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      - NODE_ENV=production
+      - PYTHON_API_BASE_URL=http://api:8000
+      - PYTHON_SEARCH_URL=http://api:8000/search
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: semantic_nginx
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  hf_cache:

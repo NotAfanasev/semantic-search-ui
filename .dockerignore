@@ -1,0 +1,10 @@
+node_modules
+.next
+venv
+pyyy/__pycache__
+pyyy/.pytest_cache
+.git
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
