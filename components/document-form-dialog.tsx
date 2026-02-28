@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import type { Document, DocumentFormData } from "@/lib/types"
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,7 @@ interface DocumentFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   document?: Document | null
-  onSubmit: (data: DocumentFormData) => void
+  onSubmit: (data: DocumentFormData) => void | Promise<void>
 }
 
 export function DocumentFormDialog({
@@ -34,31 +34,33 @@ export function DocumentFormDialog({
   const isEditing = !!document
 
   useEffect(() => {
-    if (open) {
-      setTitle(document?.title ?? "")
-      setContent(document?.content ?? "")
-      setErrors({})
-    }
+    if (!open) return
+    setTitle(document?.title ?? "")
+    setContent(document?.content ?? "")
+    setErrors({})
   }, [open, document])
 
   function validate(): boolean {
-    const newErrors: { title?: string; content?: string } = {}
+    const nextErrors: { title?: string; content?: string } = {}
+
     if (!title.trim()) {
-      newErrors.title = "Введите название"
+      nextErrors.title = "Введите название"
     } else if (title.trim().length < 3) {
-      newErrors.title = "Минимум 3 символа"
+      nextErrors.title = "Минимум 3 символа"
     }
+
     if (!content.trim()) {
-      newErrors.content = "Введите содержание"
+      nextErrors.content = "Введите содержание"
     }
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
     if (!validate()) return
-    onSubmit({ title: title.trim(), content: content.trim() })
+    await onSubmit({ title: title.trim(), content: content.trim() })
   }
 
   return (
@@ -79,16 +81,14 @@ export function DocumentFormDialog({
               id="doc-title"
               placeholder="Введите название документа..."
               value={title}
-              onChange={(e) => {
-                setTitle(e.target.value)
+              onChange={(event) => {
+                setTitle(event.target.value)
                 if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }))
               }}
               className={errors.title ? "border-destructive" : ""}
               autoFocus
             />
-            {errors.title && (
-              <p className="text-sm text-destructive">{errors.title}</p>
-            )}
+            {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -99,29 +99,20 @@ export function DocumentFormDialog({
               id="doc-content"
               placeholder="Введите содержание документа..."
               value={content}
-              onChange={(e) => {
-                setContent(e.target.value)
-                if (errors.content)
-                  setErrors((prev) => ({ ...prev, content: undefined }))
+              onChange={(event) => {
+                setContent(event.target.value)
+                if (errors.content) setErrors((prev) => ({ ...prev, content: undefined }))
               }}
-              className={`min-h-[200px] resize-y ${errors.content ? "border-destructive" : ""}`}
+              className={`min-h-[220px] resize-y ${errors.content ? "border-destructive" : ""}`}
             />
-            {errors.content && (
-              <p className="text-sm text-destructive">{errors.content}</p>
-            )}
+            {errors.content && <p className="text-sm text-destructive">{errors.content}</p>}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Отмена
             </Button>
-            <Button type="submit">
-              {isEditing ? "Сохранить" : "Создать"}
-            </Button>
+            <Button type="submit">{isEditing ? "Сохранить" : "Создать"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

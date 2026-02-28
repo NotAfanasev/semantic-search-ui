@@ -1,0 +1,9 @@
+numpy
+torch
+open_clip_torch
+pandas
+sentence-transformers
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv

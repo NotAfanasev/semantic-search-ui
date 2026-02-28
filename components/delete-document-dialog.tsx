@@ -15,7 +15,7 @@ interface DeleteDocumentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   documentTitle: string
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }
 
 export function DeleteDocumentDialog({
@@ -30,10 +30,7 @@ export function DeleteDocumentDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Удалить документ?</AlertDialogTitle>
           <AlertDialogDescription>
-            Документ{" "}
-            <span className="font-medium text-foreground">
-              {`"${documentTitle}"`}
-            </span>{" "}
+            Документ <span className="font-medium text-foreground">{`"${documentTitle}"`}</span>{" "}
             будет удален без возможности восстановления.
           </AlertDialogDescription>
         </AlertDialogHeader>

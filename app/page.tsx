@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useCallback } from "react"
 import { SearchBar } from "@/components/search-bar"
@@ -67,7 +67,7 @@ export default function SearchPage() {
             </p>
             <div className="space-y-3">
               {results.map((result, index) => (
-                <ResultCard key={result.id} result={result} index={index} />
+                <ResultCard key={`${result.id}-${index}`} result={result} index={index} />
               ))}
             </div>
           </div>

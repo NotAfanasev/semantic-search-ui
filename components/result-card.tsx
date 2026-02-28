@@ -1,7 +1,6 @@
-import Link from "next/link"
 import type { SearchResult } from "@/lib/types"
 import { RelevanceBadge } from "./relevance-badge"
-import { ArrowRight } from "lucide-react"
+import { DocumentPreviewDialog } from "./document-preview-dialog"
 
 interface ResultCardProps {
   result: SearchResult
@@ -28,13 +27,7 @@ export function ResultCard({ result, index }: ResultCardProps) {
             {result.snippet}
           </p>
         </div>
-        <Link
-          href={`/document/${result.id}`}
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground transition-all duration-200 hover:bg-secondary hover:border-foreground/10 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          Открыть
-          <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-        </Link>
+        <DocumentPreviewDialog docId={result.id} />
       </div>
     </div>
   )

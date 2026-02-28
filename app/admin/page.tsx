@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type { Document, DocumentFormData } from "@/lib/types"
 import {
-  getAllDocuments,
-  addDocument,
-  updateDocument,
-  deleteDocument,
-} from "@/lib/mock-data"
+  createAdminDocument,
+  deleteAdminDocument,
+  listAdminDocuments,
+  updateAdminDocument,
+} from "@/lib/api"
 import { Header } from "@/components/header"
 import { DocumentFormDialog } from "@/components/document-form-dialog"
 import { DeleteDocumentDialog } from "@/components/delete-document-dialog"
@@ -25,13 +25,39 @@ import { Plus, Pencil, Trash2, FileText } from "lucide-react"
 import { toast } from "sonner"
 
 export default function AdminPage() {
-  const [documents, setDocuments] = useState<Document[]>(getAllDocuments)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null)
 
-  const refreshDocuments = useCallback(() => {
-    setDocuments(getAllDocuments())
+  const refreshDocuments = useCallback(async () => {
+    const data = await listAdminDocuments()
+    setDocuments(data)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const data = await listAdminDocuments()
+        if (!cancelled) {
+          setDocuments(data)
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error("Не удалось загрузить документы")
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   function handleCreate() {
@@ -44,35 +70,33 @@ export default function AdminPage() {
     setFormOpen(true)
   }
 
-  function handleFormSubmit(data: DocumentFormData) {
-    if (editingDoc) {
-      const updated = updateDocument(editingDoc.id, data)
-      if (updated) {
-        toast.success("Документ обновлен", {
-          description: updated.title,
-        })
+  async function handleFormSubmit(data: DocumentFormData) {
+    try {
+      if (editingDoc) {
+        const updated = await updateAdminDocument(editingDoc.id, data)
+        toast.success("Документ обновлен", { description: updated.title })
+      } else {
+        const created = await createAdminDocument(data)
+        toast.success("Документ создан", { description: created.title })
       }
-    } else {
-      const created = addDocument(data)
-      toast.success("Документ создан", {
-        description: created.title,
-      })
+      await refreshDocuments()
+      setFormOpen(false)
+      setEditingDoc(null)
+    } catch {
+      toast.error("Не удалось сохранить документ")
     }
-    refreshDocuments()
-    setFormOpen(false)
-    setEditingDoc(null)
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (!deleteTarget) return
-    const success = deleteDocument(deleteTarget.id)
-    if (success) {
-      toast.success("Документ удален", {
-        description: deleteTarget.title,
-      })
+    try {
+      await deleteAdminDocument(deleteTarget.id)
+      toast.success("Документ удален", { description: deleteTarget.title })
+      await refreshDocuments()
+      setDeleteTarget(null)
+    } catch {
+      toast.error("Не удалось удалить документ")
     }
-    refreshDocuments()
-    setDeleteTarget(null)
   }
 
   function formatDate(dateStr: string) {
@@ -88,7 +112,6 @@ export default function AdminPage() {
       <Header />
 
       <main className="flex-1 w-full max-w-[900px] mx-auto px-6 py-8">
-        {/* Title bar */}
         <div className="flex items-center justify-between gap-4 mb-8">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-bold text-foreground tracking-tight text-balance">
@@ -104,20 +127,16 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="flex items-center gap-3 mb-6">
           <Badge variant="secondary" className="text-sm px-3 py-1 font-normal">
             {documents.length}{" "}
-            {documents.length === 1
-              ? "документ"
-              : documents.length < 5
-                ? "документа"
-                : "документов"}
+            {documents.length === 1 ? "документ" : documents.length < 5 ? "документа" : "документов"}
           </Badge>
         </div>
 
-        {/* Table or empty state */}
-        {documents.length === 0 ? (
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Загрузка...</div>
+        ) : documents.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center py-20 text-center"
             style={{ animation: "fadeInUp 0.4s ease-out" }}
@@ -125,9 +144,7 @@ export default function AdminPage() {
             <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted mb-4">
               <FileText className="h-6 w-6 text-muted-foreground" />
             </div>
-            <h3 className="text-base font-semibold text-foreground mb-1">
-              Нет документов
-            </h3>
+            <h3 className="text-base font-semibold text-foreground mb-1">Нет документов</h3>
             <p className="text-sm text-muted-foreground mb-6 max-w-xs">
               Создайте первый документ, чтобы он появился в поиске
             </p>
@@ -145,15 +162,9 @@ export default function AdminPage() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="font-medium">Название</TableHead>
-                  <TableHead className="font-medium hidden sm:table-cell w-[120px]">
-                    Создан
-                  </TableHead>
-                  <TableHead className="font-medium hidden md:table-cell w-[120px]">
-                    Обновлен
-                  </TableHead>
-                  <TableHead className="font-medium text-right w-[100px]">
-                    Действия
-                  </TableHead>
+                  <TableHead className="font-medium hidden sm:table-cell w-[120px]">Создан</TableHead>
+                  <TableHead className="font-medium hidden md:table-cell w-[120px]">Обновлен</TableHead>
+                  <TableHead className="font-medium text-right w-[100px]">Действия</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -161,9 +172,7 @@ export default function AdminPage() {
                   <TableRow key={doc.id} className="group">
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium text-foreground line-clamp-1">
-                          {doc.title}
-                        </span>
+                        <span className="font-medium text-foreground line-clamp-1">{doc.title}</span>
                         <span className="text-xs text-muted-foreground line-clamp-1 sm:hidden">
                           {formatDate(doc.updatedAt)}
                         </span>
@@ -205,7 +214,6 @@ export default function AdminPage() {
         )}
       </main>
 
-      {/* Dialogs */}
       <DocumentFormDialog
         open={formOpen}
         onOpenChange={(open) => {
