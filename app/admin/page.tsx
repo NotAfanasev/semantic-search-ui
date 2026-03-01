@@ -3,6 +3,8 @@ import { AdminLogin } from "@/components/admin-login"
 import { AdminPageClient } from "@/components/admin-page-client"
 import { isAdminAuthenticated, isAdminPasswordConfigured } from "@/lib/admin-auth"
 
+export const dynamic = "force-dynamic"
+
 export default async function AdminPage() {
   const configured = isAdminPasswordConfigured()
   const authenticated = configured ? await isAdminAuthenticated() : false
