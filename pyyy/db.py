@@ -94,13 +94,11 @@ def save_docs_df(df: pd.DataFrame) -> None:
         .reset_index()
     )
 
-    chunks = normalized.copy()
-    chunks["chunk_index"] = (
-        chunks["chunk_id"]
-        .astype(str)
-        .str.extract(r"(\d+)$", expand=False)
-        .fillna("0")
-        .astype(int)
+    chunks = normalized.sort_values(["doc_id", "chunk_id"], kind="stable").copy()
+    chunks["chunk_index"] = chunks.groupby("doc_id", sort=False).cumcount() + 1
+    chunks["chunk_id"] = chunks.apply(
+        lambda row: f"{str(row['doc_id'])}_C{int(row['chunk_index']):02d}",
+        axis=1,
     )
 
     with _connect() as conn:
@@ -142,4 +140,3 @@ def save_docs_df(df: pd.DataFrame) -> None:
                     ),
                 )
         conn.commit()
-
