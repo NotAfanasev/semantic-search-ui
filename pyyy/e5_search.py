@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
+import db
 try:
     from rich.console import Console
     from rich.table import Table
@@ -186,11 +187,22 @@ def _today_iso() -> str:
 
 
 def _load_docs_state(csv_path: Optional[str] = None) -> tuple[pd.DataFrame, str]:
+    if db.is_enabled():
+        if not db.has_any_documents():
+            resolved_csv_path = csv_path or pick_csv_path()
+            seeded = _ensure_admin_columns(load_docs(resolved_csv_path))
+            db.save_docs_df(seeded)
+        return _ensure_admin_columns(db.load_docs_df()), "database://documents"
+
     resolved_csv_path = csv_path or pick_csv_path()
     return _ensure_admin_columns(load_docs(resolved_csv_path)), resolved_csv_path
 
 
 def _index_cache_path(csv_path: str) -> str:
+    if csv_path.startswith("database://"):
+        base = Path(__file__).resolve().parent / "data"
+        base.mkdir(parents=True, exist_ok=True)
+        return str(base / f"documents.{_model_slug()}.embeddings.npz")
     csv_file = Path(csv_path)
     return str(csv_file.with_name(f"{csv_file.stem}.{_model_slug()}.embeddings.npz"))
 
@@ -233,8 +245,14 @@ def _save_cached_embeddings(csv_path: str, df: pd.DataFrame, embeddings: np.ndar
 def _persist_docs(df: pd.DataFrame, csv_path: str) -> None:
     global _STATE
     cleaned = df.fillna("").copy()
-    cleaned.to_csv(csv_path, index=False, encoding="utf-8")
     cache_path = Path(_index_cache_path(csv_path))
+    if db.is_enabled():
+        db.save_docs_df(cleaned)
+        if cache_path.exists():
+            cache_path.unlink()
+        _STATE = None
+        return
+    cleaned.to_csv(csv_path, index=False, encoding="utf-8")
     if cache_path.exists():
         cache_path.unlink()
     # Invalidate semantic cache and rebuild lazily on the next search request.
@@ -483,14 +501,13 @@ def init_search(force: bool = False) -> SearchState:
     if _STATE is not None and not force:
         return _STATE
 
-    csv_path = pick_csv_path()
+    df, csv_path = _load_docs_state()
 
     console_print("[bold]Loading model:[/bold]", MODEL_NAME)
     model = _STATE.model if (_STATE is not None and force) else SentenceTransformer(MODEL_NAME)
     console_print("[green]Model loaded.[/green]\n")
 
     console_print("[bold]Loading docs:[/bold]", csv_path)
-    df = load_docs(csv_path)
 
     passages = [PASSAGE_PREFIX + normalize_text(t) for t in df["text"].astype(str).tolist()]
     console_print(f"[green]Loaded {len(passages)} passages.[/green]\n")
@@ -508,14 +525,13 @@ def init_search(force: bool = False) -> SearchState:
     if _STATE is not None and not force:
         return _STATE
 
-    csv_path = pick_csv_path()
+    df, csv_path = _load_docs_state()
 
     console_print("[bold]Loading model:[/bold]", MODEL_NAME)
     model = _STATE.model if (_STATE is not None and force) else SentenceTransformer(MODEL_NAME)
     console_print("[green]Model loaded.[/green]\n")
 
     console_print("[bold]Loading docs:[/bold]", csv_path)
-    df = load_docs(csv_path)
 
     passage_embs = _load_cached_embeddings(csv_path, df)
     if passage_embs is None:
