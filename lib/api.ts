@@ -183,3 +183,19 @@ export async function deleteAdminDocument(id: string): Promise<void> {
   })
   await assertOk(response, "Delete document request")
 }
+
+export async function loginAdmin(password: string): Promise<void> {
+  const response = await fetch("/api/admin/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  })
+  await assertOk(response, "Admin login request")
+}
+
+export async function logoutAdmin(): Promise<void> {
+  const response = await fetch("/api/admin/auth", {
+    method: "DELETE",
+  })
+  await assertOk(response, "Admin logout request")
+}

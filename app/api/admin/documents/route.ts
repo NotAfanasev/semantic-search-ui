@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isAdminAuthenticated, unauthorizedAdminResponse } from "@/lib/admin-auth"
 
 const PYTHON_API_BASE_URL = process.env.PYTHON_API_BASE_URL ?? "http://127.0.0.1:8000"
 
@@ -10,6 +11,10 @@ function jsonHeaders() {
 }
 
 export async function GET() {
+  if (!(await isAdminAuthenticated())) {
+    return unauthorizedAdminResponse()
+  }
+
   try {
     const upstreamResponse = await fetch(`${PYTHON_API_BASE_URL}/documents`, {
       cache: "no-store",
@@ -30,6 +35,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdminAuthenticated())) {
+    return unauthorizedAdminResponse()
+  }
+
   let body: unknown
   try {
     body = await request.json()

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isAdminAuthenticated, unauthorizedAdminResponse } from "@/lib/admin-auth"
 
 const PYTHON_API_BASE_URL = process.env.PYTHON_API_BASE_URL ?? "http://127.0.0.1:8000"
 
@@ -13,6 +14,10 @@ export async function PUT(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!(await isAdminAuthenticated())) {
+    return unauthorizedAdminResponse()
+  }
+
   const { id } = await context.params
   const docId = id?.trim()
   if (!docId) {
@@ -57,6 +62,10 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!(await isAdminAuthenticated())) {
+    return unauthorizedAdminResponse()
+  }
+
   const { id } = await context.params
   const docId = id?.trim()
   if (!docId) {
