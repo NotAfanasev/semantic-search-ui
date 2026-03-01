@@ -5,7 +5,6 @@ from e5_search import (
     create_document_core,
     delete_document_core,
     get_document_core,
-    init_search,
     list_documents_core,
     search_core,
     update_document_core,
@@ -23,11 +22,6 @@ class DocumentUpsertRequest(BaseModel):
     text: str
     department: str = "general"
     access_level: str = "internal"
-
-
-@app.on_event("startup")
-def startup() -> None:
-    init_search()
 
 
 @app.post("/search")

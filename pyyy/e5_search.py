@@ -180,10 +180,17 @@ def _today_iso() -> str:
     return time.strftime("%Y-%m-%d")
 
 
-def _persist_docs(df: pd.DataFrame, state: SearchState) -> SearchState:
+def _load_docs_state(csv_path: Optional[str] = None) -> tuple[pd.DataFrame, str]:
+    resolved_csv_path = csv_path or pick_csv_path()
+    return _ensure_admin_columns(load_docs(resolved_csv_path)), resolved_csv_path
+
+
+def _persist_docs(df: pd.DataFrame, csv_path: str) -> None:
+    global _STATE
     cleaned = df.fillna("").copy()
-    cleaned.to_csv(state.csv_path, index=False, encoding="utf-8")
-    return init_search(force=True)
+    cleaned.to_csv(csv_path, index=False, encoding="utf-8")
+    # Invalidate semantic cache and rebuild lazily on the next search request.
+    _STATE = None
 
 
 def _collect_full_text(rows: pd.DataFrame) -> str:
@@ -204,6 +211,54 @@ def _collect_full_text(rows: pd.DataFrame) -> str:
         if normalize_text(text)
     ]
     return "\n\n".join(parts)
+
+
+def _document_from_df(doc_id: str, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    target = str(doc_id).strip()
+    if not target:
+        return None
+
+    doc_rows = df[df["doc_id"].astype(str) == target].copy()
+    if doc_rows.empty:
+        return None
+
+    full_text = _collect_full_text(doc_rows)
+    first_row = doc_rows.iloc[0]
+    title = normalize_text(first_row.get("title", "")) or f"Р”РѕРєСѓРјРµРЅС‚ {target}"
+    created_at = _safe_str(first_row.get("created_at", "")) or _today_iso()
+    updated_at = _safe_str(first_row.get("updated_at", "")) or created_at
+
+    return {
+        "doc_id": target,
+        "title": title,
+        "text": full_text,
+        "created_at": created_at,
+        "updated_at": updated_at,
+    }
+
+
+def _list_documents_from_df(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    documents: List[Dict[str, Any]] = []
+
+    for doc_id, group in df.groupby(df["doc_id"].astype(str), sort=True):
+        if not str(doc_id).strip():
+            continue
+        first_row = group.iloc[0]
+        title = normalize_text(_safe_str(first_row.get("title", ""))) or f"Р”РѕРєСѓРјРµРЅС‚ {doc_id}"
+        created_at = _safe_str(first_row.get("created_at", "")) or _today_iso()
+        updated_at = _safe_str(first_row.get("updated_at", "")) or created_at
+        documents.append(
+            {
+                "doc_id": str(doc_id),
+                "title": title,
+                "text": _collect_full_text(group),
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }
+        )
+
+    documents.sort(key=lambda item: item["doc_id"])
+    return documents
 
 
 def print_header(model_name: str, csv_path: str) -> None:
@@ -413,13 +468,15 @@ def get_document_core(doc_id: str, state: Optional[SearchState] = None) -> Optio
     Возвращает полный документ, собранный из всех его чанков.
     """
     if state is None:
-        state = init_search()
+        df, _ = _load_docs_state()
+    else:
+        df = _ensure_admin_columns(state.df.copy())
 
     target = str(doc_id).strip()
     if not target:
         return None
 
-    df = state.df.copy()
+    df = df if state is None else state.df.copy()
     doc_rows = df[df["doc_id"].astype(str) == target].copy()
     if doc_rows.empty:
         return None
@@ -442,9 +499,11 @@ def get_document_core(doc_id: str, state: Optional[SearchState] = None) -> Optio
 
 def list_documents_core(state: Optional[SearchState] = None) -> List[Dict[str, Any]]:
     if state is None:
-        state = init_search()
+        df, _ = _load_docs_state()
+    else:
+        df = _ensure_admin_columns(state.df.copy())
 
-    df = _ensure_admin_columns(state.df.copy())
+    df = df if state is None else _ensure_admin_columns(state.df.copy())
     documents: List[Dict[str, Any]] = []
 
     for doc_id, group in df.groupby(df["doc_id"].astype(str), sort=True):
@@ -476,7 +535,9 @@ def create_document_core(
     state: Optional[SearchState] = None,
 ) -> Dict[str, Any]:
     if state is None:
-        state = init_search()
+        df, csv_path = _load_docs_state()
+    else:
+        csv_path = state.csv_path
 
     clean_title = normalize_text(title)
     if len(clean_title) < 3:
@@ -486,7 +547,7 @@ def create_document_core(
     if not chunks:
         raise ValueError("Document content is empty.")
 
-    df = _ensure_admin_columns(state.df.copy())
+    df = df if state is None else _ensure_admin_columns(state.df.copy())
     doc_id = _next_doc_id(df)
     today = _today_iso()
 
@@ -506,8 +567,8 @@ def create_document_core(
         )
 
     updated_df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
-    new_state = _persist_docs(updated_df, state)
-    doc = get_document_core(doc_id, new_state)
+    _persist_docs(updated_df, csv_path)
+    doc = _document_from_df(doc_id, updated_df)
     if doc is None:
         raise RuntimeError("Failed to load created document from index.")
     return {
@@ -528,7 +589,9 @@ def update_document_core(
     state: Optional[SearchState] = None,
 ) -> Optional[Dict[str, Any]]:
     if state is None:
-        state = init_search()
+        df, csv_path = _load_docs_state()
+    else:
+        csv_path = state.csv_path
 
     target = str(doc_id).strip()
     if not target:
@@ -542,7 +605,7 @@ def update_document_core(
     if not chunks:
         raise ValueError("Document content is empty.")
 
-    df = _ensure_admin_columns(state.df.copy())
+    df = df if state is None else _ensure_admin_columns(state.df.copy())
     mask = df["doc_id"].astype(str) == target
     if not mask.any():
         return None
@@ -570,8 +633,8 @@ def update_document_core(
         )
 
     updated_df = pd.concat([kept, pd.DataFrame(rows)], ignore_index=True)
-    new_state = _persist_docs(updated_df, state)
-    doc = get_document_core(target, new_state)
+    _persist_docs(updated_df, csv_path)
+    doc = _document_from_df(target, updated_df)
     if doc is None:
         return None
     return {
@@ -585,19 +648,21 @@ def update_document_core(
 
 def delete_document_core(doc_id: str, state: Optional[SearchState] = None) -> bool:
     if state is None:
-        state = init_search()
+        df, csv_path = _load_docs_state()
+    else:
+        csv_path = state.csv_path
 
     target = str(doc_id).strip()
     if not target:
         return False
 
-    df = _ensure_admin_columns(state.df.copy())
+    df = df if state is None else _ensure_admin_columns(state.df.copy())
     mask = df["doc_id"].astype(str) == target
     if not mask.any():
         return False
 
     updated_df = df[~mask].copy()
-    _persist_docs(updated_df, state)
+    _persist_docs(updated_df, csv_path)
     return True
 
 
