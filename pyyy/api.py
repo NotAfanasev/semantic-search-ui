@@ -1,3 +1,6 @@
+import logging
+import threading
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -12,12 +15,30 @@ from e5_search import (
 )
 
 app = FastAPI(title="E5 Semantic Search API")
+logger = logging.getLogger(__name__)
+_warmup_started = False
+_warmup_lock = threading.Lock()
+
+
+def _warmup_search_state() -> None:
+    try:
+        init_search()
+    except Exception:
+        logger.exception("Background search warmup failed")
 
 
 @app.on_event("startup")
-def warmup_search_state():
-    # Warm the lightweight cached search index before serving user traffic.
-    init_search()
+def start_background_warmup():
+    global _warmup_started
+    with _warmup_lock:
+        if _warmup_started:
+            return
+        threading.Thread(
+            target=_warmup_search_state,
+            name="search-warmup",
+            daemon=True,
+        ).start()
+        _warmup_started = True
 
 
 class SearchRequest(BaseModel):
