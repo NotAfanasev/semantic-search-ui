@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -67,6 +68,10 @@ class SearchState:
 
 _STATE: Optional[SearchState] = None
 CHUNK_SIZE = 900
+
+
+def _model_slug() -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", MODEL_NAME)
 
 def clear_screen() -> None:
     # Windows + Git Bash тоже ок
@@ -185,10 +190,53 @@ def _load_docs_state(csv_path: Optional[str] = None) -> tuple[pd.DataFrame, str]
     return _ensure_admin_columns(load_docs(resolved_csv_path)), resolved_csv_path
 
 
+def _index_cache_path(csv_path: str) -> str:
+    csv_file = Path(csv_path)
+    return str(csv_file.with_name(f"{csv_file.stem}.{_model_slug()}.embeddings.npz"))
+
+
+def _docs_signature(df: pd.DataFrame) -> str:
+    payload = df[["doc_id", "chunk_id", "title", "text"]].fillna("").astype(str)
+    joined = "\n".join("||".join(row) for row in payload.itertuples(index=False, name=None))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+def _load_cached_embeddings(csv_path: str, df: pd.DataFrame) -> Optional[np.ndarray]:
+    cache_path = Path(_index_cache_path(csv_path))
+    if not cache_path.exists():
+        return None
+
+    try:
+        with np.load(cache_path, allow_pickle=False) as cached:
+            cached_signature = str(cached["signature"].item())
+            expected_signature = _docs_signature(df)
+            if cached_signature != expected_signature:
+                return None
+
+            embeddings = cached["embeddings"]
+            if embeddings.shape[0] != len(df):
+                return None
+            return embeddings.astype(np.float32, copy=False)
+    except Exception:
+        return None
+
+
+def _save_cached_embeddings(csv_path: str, df: pd.DataFrame, embeddings: np.ndarray) -> None:
+    cache_path = _index_cache_path(csv_path)
+    np.savez_compressed(
+        cache_path,
+        embeddings=np.asarray(embeddings, dtype=np.float32),
+        signature=np.array(_docs_signature(df)),
+    )
+
+
 def _persist_docs(df: pd.DataFrame, csv_path: str) -> None:
     global _STATE
     cleaned = df.fillna("").copy()
     cleaned.to_csv(csv_path, index=False, encoding="utf-8")
+    cache_path = Path(_index_cache_path(csv_path))
+    if cache_path.exists():
+        cache_path.unlink()
     # Invalidate semantic cache and rebuild lazily on the next search request.
     _STATE = None
 
@@ -450,6 +498,35 @@ def init_search(force: bool = False) -> SearchState:
     console_print("[bold]Embedding passages (1 раз):[/bold]")
     passage_embs = embed_passages(model, passages)
     console_print("[green]Embeddings ready.[/green]\n")
+
+    _STATE = SearchState(model=model, df=df, passage_embs=passage_embs, csv_path=csv_path)
+    return _STATE
+
+
+def init_search(force: bool = False) -> SearchState:
+    global _STATE
+    if _STATE is not None and not force:
+        return _STATE
+
+    csv_path = pick_csv_path()
+
+    console_print("[bold]Loading model:[/bold]", MODEL_NAME)
+    model = _STATE.model if (_STATE is not None and force) else SentenceTransformer(MODEL_NAME)
+    console_print("[green]Model loaded.[/green]\n")
+
+    console_print("[bold]Loading docs:[/bold]", csv_path)
+    df = load_docs(csv_path)
+
+    passage_embs = _load_cached_embeddings(csv_path, df)
+    if passage_embs is None:
+        passages = [PASSAGE_PREFIX + normalize_text(t) for t in df["text"].astype(str).tolist()]
+        console_print(f"[green]Loaded {len(passages)} passages.[/green]\n")
+        console_print("[bold]Embedding passages (1 pass):[/bold]")
+        passage_embs = embed_passages(model, passages)
+        _save_cached_embeddings(csv_path, df, passage_embs)
+        console_print("[green]Embeddings ready.[/green]\n")
+    else:
+        console_print(f"[green]Loaded {len(df)} passages from cached index.[/green]\n")
 
     _STATE = SearchState(model=model, df=df, passage_embs=passage_embs, csv_path=csv_path)
     return _STATE
