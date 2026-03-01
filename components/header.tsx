@@ -12,10 +12,7 @@ export function Header() {
   return (
     <header className="w-full border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
       <div className="max-w-[900px] mx-auto px-6 py-3 flex items-center justify-between">
-        <Link
-          href="/"
-          className="flex items-center gap-3 transition-opacity hover:opacity-80"
-        >
+        <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-80">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
             <BookOpen className="h-4 w-4 text-primary-foreground" />
           </div>
@@ -47,7 +44,7 @@ export function Header() {
             )}
           >
             <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Управление</span>
+            <span className="hidden sm:inline">Администрирование</span>
           </Link>
         </nav>
       </div>

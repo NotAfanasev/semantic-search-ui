@@ -39,7 +39,7 @@ export function AdminLogin({ configured }: AdminLoginProps) {
           <Shield className="h-5 w-5 text-foreground" />
         </div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight mb-2">
-          Доступ в админку
+          Доступ к администрированию
         </h1>
         <p className="text-sm text-muted-foreground mb-6">
           Введите пароль администратора, чтобы управлять базой знаний.
@@ -61,7 +61,7 @@ export function AdminLogin({ configured }: AdminLoginProps) {
           </form>
         ) : (
           <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-900 p-4 text-sm">
-            Переменная `ADMIN_PASSWORD` не настроена. Админка заблокирована до настройки
+            Переменная `ADMIN_PASSWORD` не настроена. Администрирование заблокировано до настройки
             секрета на сервере.
           </div>
         )}
