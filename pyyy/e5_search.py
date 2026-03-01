@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import re
 from pathlib import Path
@@ -8,12 +7,18 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
-
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.text import Text
-from rich import box
+try:
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich import box
+except ImportError:
+    Console = None
+    Table = None
+    Panel = None
+    Text = None
+    box = None
 
 
 # =====================
@@ -40,9 +45,18 @@ CSV_CANDIDATES = [
 # =====================
 # Console helpers
 # =====================
-console = Console()
+console = Console() if Console is not None else None
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
+
+
+def console_print(*args: Any) -> None:
+    if console is not None:
+        console.print(*args)
+        return
+
+    plain_parts = [re.sub(r"\[[^\]]+\]", "", str(arg)) for arg in args]
+    print(*plain_parts)
 
 @dataclass
 class SearchState:
@@ -193,6 +207,13 @@ def _collect_full_text(rows: pd.DataFrame) -> str:
 
 
 def print_header(model_name: str, csv_path: str) -> None:
+    if console is None or Text is None or Panel is None:
+        print("E5 Semantic Search (console)")
+        print(f"Model: {model_name}")
+        print(f"CSV: {csv_path}")
+        print("Commands: help, clear, exit")
+        return
+
     title = Text("E5 Semantic Search (console)", style="bold")
     info = Text.assemble(
         ("Model: ", "bold"),
@@ -208,6 +229,13 @@ def print_header(model_name: str, csv_path: str) -> None:
 
 
 def print_help() -> None:
+    if console is None or Panel is None:
+        print("Как пользоваться")
+        print("- Вводишь запрос и получаешь лучшие совпадения.")
+        print("- Пустой ввод не выполняет поиск.")
+        print("Команды: help, clear, exit")
+        return
+
     msg = """
 [bold]Как пользоваться[/bold]
 • Вводишь запрос — получаешь TOP_RESULTS лучших совпадений.
@@ -224,7 +252,10 @@ def print_help() -> None:
     console.print(Panel(msg.strip(), title="Help", border_style="magenta"))
 
 
-def results_table(results: List[Dict[str, Any]], elapsed: float) -> Table:
+def results_table(results: List[Dict[str, Any]], elapsed: float):
+    if Table is None or box is None:
+        return results
+
     table = Table(
         title=f"Результаты (за {elapsed:.2f} сек)",
         box=box.SIMPLE_HEAVY,
@@ -351,19 +382,19 @@ def init_search(force: bool = False) -> SearchState:
 
     csv_path = pick_csv_path()
 
-    console.print("[bold]Loading model:[/bold]", MODEL_NAME)
+    console_print("[bold]Loading model:[/bold]", MODEL_NAME)
     model = _STATE.model if (_STATE is not None and force) else SentenceTransformer(MODEL_NAME)
-    console.print("[green]Model loaded.[/green]\n")
+    console_print("[green]Model loaded.[/green]\n")
 
-    console.print("[bold]Loading docs:[/bold]", csv_path)
+    console_print("[bold]Loading docs:[/bold]", csv_path)
     df = load_docs(csv_path)
 
     passages = [PASSAGE_PREFIX + normalize_text(t) for t in df["text"].astype(str).tolist()]
-    console.print(f"[green]Loaded {len(passages)} passages.[/green]\n")
+    console_print(f"[green]Loaded {len(passages)} passages.[/green]\n")
 
-    console.print("[bold]Embedding passages (1 раз):[/bold]")
+    console_print("[bold]Embedding passages (1 раз):[/bold]")
     passage_embs = embed_passages(model, passages)
-    console.print("[green]Embeddings ready.[/green]\n")
+    console_print("[green]Embeddings ready.[/green]\n")
 
     _STATE = SearchState(model=model, df=df, passage_embs=passage_embs, csv_path=csv_path)
     return _STATE
@@ -599,10 +630,10 @@ def main() -> None:
         elapsed = time.time() - t0
 
         if not results:
-            console.print("\n[bold yellow]No results found.[/bold yellow]")
+            console_print("\n[bold yellow]No results found.[/bold yellow]")
             continue
 
-        console.print()
+        console_print()
         for i, r in enumerate(results, 1):
             score = r["score"]
             title = r.get("title", "")
@@ -610,14 +641,14 @@ def main() -> None:
             chunk_id = r.get("chunk_id", "")
             text = r.get("text", "")
 
-            console.print(f"[bold cyan]{i}. Score: {score:.3f}[/bold cyan]")
-            console.print(f"[dim]{doc_id} | {chunk_id} | {title}[/dim]")
-            console.print(text[:400])
-            console.print("-" * 60)
+            console_print(f"[bold cyan]{i}. Score: {score:.3f}[/bold cyan]")
+            console_print(f"[dim]{doc_id} | {chunk_id} | {title}[/dim]")
+            console_print(text[:400])
+            console_print("-" * 60)
 
-        console.print(f"[green]Done in {elapsed:.3f}s[/green]")
+        console_print(f"[green]Done in {elapsed:.3f}s[/green]")
 
-    console.print("\n[bold]Bye 👋[/bold]")
+    console_print("\n[bold]Bye 👋[/bold]")
 
 
 if __name__ == "__main__":
