@@ -2,12 +2,24 @@ import { NextResponse } from "next/server"
 import { isAdminAuthenticated, unauthorizedAdminResponse } from "@/lib/admin-auth"
 
 const PYTHON_API_BASE_URL = process.env.PYTHON_API_BASE_URL ?? "http://127.0.0.1:8000"
+const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN ?? ""
 
 function jsonHeaders() {
   return {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
   }
+}
+
+function upstreamAdminHeaders(contentType = false) {
+  const headers: Record<string, string> = {}
+  if (contentType) {
+    headers["Content-Type"] = "application/json"
+  }
+  if (ADMIN_API_TOKEN) {
+    headers["X-Admin-Token"] = ADMIN_API_TOKEN
+  }
+  return headers
 }
 
 export async function PUT(
@@ -36,9 +48,7 @@ export async function PUT(
       `${PYTHON_API_BASE_URL}/documents/${encodeURIComponent(docId)}`,
       {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: upstreamAdminHeaders(true),
         body: JSON.stringify(body),
         cache: "no-store",
       }
@@ -77,6 +87,7 @@ export async function DELETE(
       `${PYTHON_API_BASE_URL}/documents/${encodeURIComponent(docId)}`,
       {
         method: "DELETE",
+        headers: upstreamAdminHeaders(),
         cache: "no-store",
       }
     )

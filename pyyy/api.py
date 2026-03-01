@@ -1,7 +1,8 @@
 import logging
+import os
 import threading
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from e5_search import (
@@ -18,6 +19,7 @@ app = FastAPI(title="E5 Semantic Search API")
 logger = logging.getLogger(__name__)
 _warmup_started = False
 _warmup_lock = threading.Lock()
+ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 
 
 def _warmup_search_state() -> None:
@@ -52,6 +54,13 @@ class DocumentUpsertRequest(BaseModel):
     access_level: str = "internal"
 
 
+def _require_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
+    if not ADMIN_API_TOKEN:
+        raise HTTPException(status_code=503, detail="Admin API token is not configured")
+    if x_admin_token != ADMIN_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.post("/search")
 def search_endpoint(req: SearchRequest):
     results = search_core(req.query)
@@ -67,12 +76,16 @@ def get_document_endpoint(doc_id: str):
 
 
 @app.get("/documents")
-def list_documents_endpoint():
+def list_documents_endpoint(x_admin_token: str | None = Header(default=None)):
+    _require_admin_token(x_admin_token)
     return {"documents": list_documents_core()}
 
 
 @app.post("/documents")
-def create_document_endpoint(req: DocumentUpsertRequest):
+def create_document_endpoint(
+    req: DocumentUpsertRequest, x_admin_token: str | None = Header(default=None)
+):
+    _require_admin_token(x_admin_token)
     try:
         doc = create_document_core(
             title=req.title,
@@ -86,7 +99,10 @@ def create_document_endpoint(req: DocumentUpsertRequest):
 
 
 @app.put("/documents/{doc_id}")
-def update_document_endpoint(doc_id: str, req: DocumentUpsertRequest):
+def update_document_endpoint(
+    doc_id: str, req: DocumentUpsertRequest, x_admin_token: str | None = Header(default=None)
+):
+    _require_admin_token(x_admin_token)
     try:
         doc = update_document_core(
             doc_id=doc_id,
@@ -105,7 +121,8 @@ def update_document_endpoint(doc_id: str, req: DocumentUpsertRequest):
 
 
 @app.delete("/documents/{doc_id}")
-def delete_document_endpoint(doc_id: str):
+def delete_document_endpoint(doc_id: str, x_admin_token: str | None = Header(default=None)):
+    _require_admin_token(x_admin_token)
     deleted = delete_document_core(doc_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
