@@ -5,12 +5,19 @@ from e5_search import (
     create_document_core,
     delete_document_core,
     get_document_core,
+    init_search,
     list_documents_core,
     search_core,
     update_document_core,
 )
 
 app = FastAPI(title="E5 Semantic Search API")
+
+
+@app.on_event("startup")
+def warmup_search_state():
+    # Warm the lightweight cached search index before serving user traffic.
+    init_search()
 
 
 class SearchRequest(BaseModel):
