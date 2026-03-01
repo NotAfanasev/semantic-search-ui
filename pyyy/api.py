@@ -67,6 +67,11 @@ def search_endpoint(req: SearchRequest):
     return {"query": req.query, "results": results}
 
 
+@app.get("/health")
+def health_endpoint():
+    return {"ok": True}
+
+
 @app.get("/documents/{doc_id}")
 def get_document_endpoint(doc_id: str):
     doc = get_document_core(doc_id)
