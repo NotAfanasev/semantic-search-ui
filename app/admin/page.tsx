@@ -27,6 +27,7 @@ import { toast } from "sonner"
 export default function AdminPage() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null)
@@ -34,6 +35,7 @@ export default function AdminPage() {
   const refreshDocuments = useCallback(async () => {
     const data = await listAdminDocuments()
     setDocuments(data)
+    setLoadError(false)
   }, [])
 
   useEffect(() => {
@@ -42,8 +44,12 @@ export default function AdminPage() {
     const run = async () => {
       try {
         const data = await listAdminDocuments()
-        if (!cancelled) setDocuments(data)
+        if (!cancelled) {
+          setDocuments(data)
+          setLoadError(false)
+        }
       } catch {
+        if (!cancelled) setLoadError(true)
         if (!cancelled) toast.error("Не удалось загрузить документы")
       } finally {
         if (!cancelled) setLoading(false)
@@ -137,6 +143,22 @@ export default function AdminPage() {
 
         {loading ? (
           <div className="text-sm text-muted-foreground">Загрузка...</div>
+        ) : loadError ? (
+          <div
+            className="flex flex-col items-center justify-center py-20 text-center"
+            style={{ animation: "fadeInUp 0.4s ease-out" }}
+          >
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-muted mb-4">
+              <FileText className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground mb-1">Ошибка загрузки документов</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-xs">
+              Список документов сейчас недоступен. Попробуйте обновить страницу или повторить позже.
+            </p>
+            <Button onClick={() => void refreshDocuments()} className="gap-2">
+              Обновить список
+            </Button>
+          </div>
         ) : documents.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center py-20 text-center"
