@@ -103,7 +103,7 @@ export function DocumentFormDialog({
                 setContent(event.target.value)
                 if (errors.content) setErrors((prev) => ({ ...prev, content: undefined }))
               }}
-              className={`min-h-[220px] resize-y ${errors.content ? "border-destructive" : ""}`}
+              className={`min-h-[220px] resize-y [overflow-wrap:anywhere] ${errors.content ? "border-destructive" : ""}`}
             />
             {errors.content && <p className="text-sm text-destructive">{errors.content}</p>}
           </div>
