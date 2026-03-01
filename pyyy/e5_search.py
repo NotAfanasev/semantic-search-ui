@@ -24,11 +24,11 @@ except ImportError:
 # =====================
 # CONFIG
 # =====================
-MODEL_NAME = "intfloat/multilingual-e5-base"
+MODEL_NAME = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
 
 TOP_CHUNKS = 80
-TOP_RESULTS = 5
-MAX_CHUNKS_PER_DOC = 2
+TOP_RESULTS = 3
+MAX_CHUNKS_PER_DOC = 1
 MIN_SCORE = 0.30
 
 USE_DEPT_ROUTING = False  # оставил как было
