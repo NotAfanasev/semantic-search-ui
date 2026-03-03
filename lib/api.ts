@@ -50,6 +50,7 @@ export interface SearchDocumentPreview {
 
 const SEARCH_ENDPOINT = "/api/search"
 const ADMIN_DOCS_ENDPOINT = "/api/admin/documents"
+const SEARCH_REQUEST_TIMEOUT_MS = 30_000
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -109,12 +110,42 @@ async function assertOk(response: Response, context: string): Promise<void> {
   throw new Error(`${context} failed (${response.status}): ${body}`)
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export async function searchDocuments(query: string): Promise<SearchResult[]> {
-  const response = await fetch(SEARCH_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  })
+  let response: Response
+  try {
+    response = await fetchWithTimeout(
+      SEARCH_ENDPOINT,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      },
+      SEARCH_REQUEST_TIMEOUT_MS,
+    )
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Search request timed out after ${SEARCH_REQUEST_TIMEOUT_MS / 1000}s`)
+    }
+    throw error
+  }
+
   await assertOk(response, "Search request")
   const payload = (await response.json()) as PythonSearchResponse
   const items = Array.isArray(payload.results) ? payload.results : []
