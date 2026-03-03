@@ -220,13 +220,60 @@ def embed_passages(model: SentenceTransformer, passages: List[str]) -> np.ndarra
 
 
 def embed_query(model: SentenceTransformer, query: str) -> np.ndarray:
-    text = QUERY_PREFIX + wrap_query(query)
-    return model.encode(
-        [text],
+    clean_query = normalize_text(query)
+    raw_query = QUERY_PREFIX + clean_query
+    wrapped_query = QUERY_PREFIX + wrap_query(clean_query)
+
+    # Short queries work better without heavy prompt wrapping.
+    if len(clean_query.split()) <= 2:
+        return model.encode(
+            [raw_query],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )[0].astype(np.float32)
+
+    vectors = model.encode(
+        [raw_query, wrapped_query],
         convert_to_numpy=True,
         normalize_embeddings=True,
         show_progress_bar=False,
-    )[0].astype(np.float32)
+    ).astype(np.float32)
+    mixed = (0.75 * vectors[0]) + (0.25 * vectors[1])
+    norm = np.linalg.norm(mixed)
+    if norm > 0:
+        mixed = mixed / norm
+    return mixed.astype(np.float32)
+
+
+def _query_terms(query: str) -> List[str]:
+    terms = re.findall(r"[0-9A-Za-zА-Яа-яЁё-]{3,}", query.lower())
+    variants: List[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        for candidate in (term, term[:-1], term[:-2]):
+            if len(candidate) < 3:
+                continue
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            variants.append(candidate)
+    return variants
+
+
+def _lexical_bonus(query_terms: List[str], title: str, text: str) -> float:
+    if not query_terms:
+        return 0.0
+
+    title_l = title.lower()
+    text_l = text.lower()
+    bonus = 0.0
+    for term in query_terms:
+        if term in title_l:
+            bonus += 0.18
+        elif term in text_l:
+            bonus += 0.05
+    return min(bonus, 0.30)
 
 
 def search(
@@ -245,22 +292,32 @@ def search(
         return []
 
     top_idx = np.argsort(-sims)[: min(TOP_CHUNKS, sims.size)]
+    query_terms = _query_terms(clean_query)
+
+    ranked: List[tuple[float, float, int]] = []
+    for idx in top_idx:
+        semantic_score = float(sims[int(idx)])
+        if semantic_score < MIN_SCORE:
+            continue
+        row = df.iloc[int(idx)]
+        title = _safe_str(row.get("title", ""))
+        text = _safe_str(row.get("text", ""))
+        score = semantic_score + _lexical_bonus(query_terms, title, text)
+        ranked.append((score, semantic_score, int(idx)))
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+
     results: List[Dict[str, Any]] = []
     per_doc_count: Dict[str, int] = {}
-
-    for idx in top_idx:
-        score = float(sims[int(idx)])
-        if score < MIN_SCORE:
-            break
-
-        row = df.iloc[int(idx)]
+    for score, semantic_score, idx in ranked:
+        row = df.iloc[idx]
         doc_id = _safe_str(row.get("doc_id", ""))
         if per_doc_count.get(doc_id, 0) >= MAX_CHUNKS_PER_DOC:
             continue
 
         results.append(
             {
-                "score": score,
+                "score": semantic_score,
                 "doc_id": doc_id,
                 "chunk_id": _safe_str(row.get("chunk_id", "")),
                 "title": _safe_str(row.get("title", "")),
@@ -268,7 +325,6 @@ def search(
             }
         )
         per_doc_count[doc_id] = per_doc_count.get(doc_id, 0) + 1
-
         if len(results) >= TOP_RESULTS:
             break
 
